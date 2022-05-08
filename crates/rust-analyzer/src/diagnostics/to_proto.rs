@@ -7,7 +7,7 @@ use itertools::Itertools;
 use stdx::format_to;
 use vfs::{AbsPath, AbsPathBuf};
 
-use crate::{lsp_ext, to_proto::url_from_abs_path};
+use crate::{line_index::OffsetEncoding, lsp_ext, to_proto::url_from_abs_path};
 
 use super::{DiagnosticsMapConfig, Fix};
 
@@ -62,14 +62,15 @@ fn location(
     let uri = url_from_abs_path(&file_name);
 
     let range = lsp_types::Range::new(
-        position(span, span.line_start, span.column_start),
-        position(span, span.line_end, span.column_end),
+        position(config, span, span.line_start, span.column_start),
+        position(config, span, span.line_end, span.column_end),
     );
 
     lsp_types::Location { uri, range }
 }
 
 fn position(
+    config: &DiagnosticsMapConfig,
     span: &DiagnosticSpan,
     line_offset: usize,
     column_offset: usize,
@@ -91,9 +92,11 @@ fn position(
             if char_offset > column_offset {
                 break;
             }
-            if char.len_utf16() > 1 {
-                true_column_offset += char.len_utf16() - 1;
-            }
+            let offset_shift = match config.offset_encoding {
+                OffsetEncoding::Utf8 => char.len_utf8() - 1,
+                OffsetEncoding::Utf16 => char.len_utf16() - 1,
+            };
+            true_column_offset += offset_shift;
         }
     }
 

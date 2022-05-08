@@ -6,7 +6,7 @@ use std::{mem, sync::Arc};
 use ide::FileId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::lsp_ext;
+use crate::{line_index::OffsetEncoding, lsp_ext};
 
 pub(crate) type CheckFixes = Arc<FxHashMap<FileId, Vec<Fix>>>;
 
@@ -15,6 +15,7 @@ pub struct DiagnosticsMapConfig {
     pub remap_prefix: FxHashMap<String, String>,
     pub warnings_as_info: Vec<String>,
     pub warnings_as_hint: Vec<String>,
+    pub offset_encoding: OffsetEncoding,
 }
 
 #[derive(Debug, Default, Clone)]

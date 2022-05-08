@@ -7,9 +7,16 @@
 
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
 pub enum OffsetEncoding {
     Utf8,
     Utf16,
+}
+
+impl Default for OffsetEncoding {
+    fn default() -> Self {
+        OffsetEncoding::Utf16
+    }
 }
 
 pub(crate) struct LineIndex {

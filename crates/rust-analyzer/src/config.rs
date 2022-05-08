@@ -809,6 +809,7 @@ impl Config {
             remap_prefix: self.data.diagnostics_remapPrefix.clone(),
             warnings_as_info: self.data.diagnostics_warningsAsInfo.clone(),
             warnings_as_hint: self.data.diagnostics_warningsAsHint.clone(),
+            offset_encoding: self.offset_encoding(),
         }
     }
 
