@@ -61,19 +61,46 @@ fn location(
     let file_name = resolve_path(config, workspace_root, &span.file_name);
     let uri = url_from_abs_path(&file_name);
 
-    // FIXME: this doesn't handle UTF16 offsets correctly
     let range = lsp_types::Range::new(
-        lsp_types::Position::new(
-            (span.line_start as u32).saturating_sub(1),
-            (span.column_start as u32).saturating_sub(1),
-        ),
-        lsp_types::Position::new(
-            (span.line_end as u32).saturating_sub(1),
-            (span.column_end as u32).saturating_sub(1),
-        ),
+        position(span, span.line_start, span.column_start),
+        position(span, span.line_end, span.column_end),
     );
 
     lsp_types::Location { uri, range }
+}
+
+fn position(
+    span: &DiagnosticSpan,
+    line_offset: usize,
+    column_offset: usize,
+) -> lsp_types::Position {
+    let line_index = line_offset - span.line_start;
+
+    let mut true_column_offset = column_offset;
+    if let Some(line) = span.text.get(line_index) {
+        if line.text.chars().count() == line.text.len() {
+            // all utf-8
+            return lsp_types::Position {
+                line: (line_offset as u32).saturating_sub(1),
+                character: (column_offset as u32).saturating_sub(1),
+            };
+        }
+        let mut char_offset = 0;
+        for char in line.text.chars() {
+            char_offset += 1;
+            if char_offset > column_offset {
+                break;
+            }
+            if char.len_utf16() > 1 {
+                true_column_offset += char.len_utf16() - 1;
+            }
+        }
+    }
+
+    return lsp_types::Position {
+        line: (line_offset as u32).saturating_sub(1),
+        character: (true_column_offset as u32).saturating_sub(1),
+    };
 }
 
 /// Extracts a suitable "primary" location from a rustc diagnostic.
@@ -1026,6 +1053,67 @@ mod tests {
     }"##,
             expect_file!["./test_data/clippy_pass_by_ref.txt"],
         );
+    }
+
+    #[test]
+    fn rustc_range_map_lsp_position() {
+        check(
+            r##"{
+            "message": "mismatched types",
+            "code": {
+                "code": "E0308",
+                "explanation": "Expected type did not match the received type.\n\nErroneous code examples:\n\n```compile_fail,E0308\nfn plus_one(x: i32) -> i32 {\n    x + 1\n}\n\nplus_one(\"Not a number\");\n//       ^^^^^^^^^^^^^^ expected `i32`, found `&str`\n\nif \"Not a bool\" {\n// ^^^^^^^^^^^^ expected `bool`, found `&str`\n}\n\nlet x: f32 = \"Not a float\";\n//     ---   ^^^^^^^^^^^^^ expected `f32`, found `&str`\n//     |\n//     expected due to this\n```\n\nThis error occurs when an expression was used in a place where the compiler\nexpected an expression of a different type. It can occur in several cases, the\nmost common being when calling a function and passing an argument which has a\ndifferent type than the matching type in the function declaration.\n"
+            },
+            "level": "error",
+            "spans": [
+                {
+                    "file_name": "crates/test_diagnostics/src/main.rs",
+                    "byte_start": 87,
+                    "byte_end": 105,
+                    "line_start": 4,
+                    "line_end": 4,
+                    "column_start": 18,
+                    "column_end": 24,
+                    "is_primary": true,
+                    "text": [
+                        {
+                            "text": "    let x: u32 = \"𐐀𐐀𐐀𐐀\"; // 17-23",
+                            "highlight_start": 18,
+                            "highlight_end": 24
+                        }
+                    ],
+                    "label": "expected `u32`, found `&str`",
+                    "suggested_replacement": null,
+                    "suggestion_applicability": null,
+                    "expansion": null
+                },
+                {
+                    "file_name": "crates/test_diagnostics/src/main.rs",
+                    "byte_start": 81,
+                    "byte_end": 84,
+                    "line_start": 4,
+                    "line_end": 4,
+                    "column_start": 12,
+                    "column_end": 15,
+                    "is_primary": false,
+                    "text": [
+                        {
+                            "text": "    let x: u32 = \"𐐀𐐀𐐀𐐀\"; // 17-23",
+                            "highlight_start": 12,
+                            "highlight_end": 15
+                        }
+                    ],
+                    "label": "expected due to this",
+                    "suggested_replacement": null,
+                    "suggestion_applicability": null,
+                    "expansion": null
+                }
+            ],
+            "children": [],
+            "rendered": "error[E0308]: mismatched types\n --> crates/test_diagnostics/src/main.rs:4:18\n  |\n4 |     let x: u32 = \"𐐀𐐀𐐀𐐀\"; // 17-23\n  |            ---   ^^^^^^ expected `u32`, found `&str`\n  |            |\n  |            expected due to this\n\n"
+        }"##,
+            expect_file!("./test_data/rustc_range_map_lsp_position.txt"),
+        )
     }
 
     #[test]
