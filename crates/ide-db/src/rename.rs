@@ -232,12 +232,14 @@ fn rename_mod(
         }
     }
 
-    let def = Definition::Module(module);
-    let usages = def.usages(sema).all();
-    let ref_edits = usages.iter().map(|(&file_id, references)| {
-        (file_id, source_edit_from_references(references, def, new_name))
-    });
-    source_change.extend(ref_edits);
+    if !module.is_crate_root(sema.db) {
+        let def = Definition::Module(module);
+        let usages = def.usages(sema).all();
+        let ref_edits = usages.iter().map(|(&file_id, references)| {
+            (file_id, source_edit_from_references(references, def, new_name))
+        });
+        source_change.extend(ref_edits);
+    }
 
     Ok(source_change)
 }
